@@ -1,9 +1,9 @@
 #!/system/bin/sh
 printf "Content-Type: application/json\r\n\r\n"
 
-MODDIR="/data/adb/modules/boot_delay_manager"
-LOG_FILE="$MODDIR/boot_delay.log"
-LIST_FILE="$MODDIR/delayed_receivers.list"
+DATA_DIR="/data/adb/boot_delay_manager"
+LOG_FILE="$DATA_DIR/boot_delay.log"
+LIST_FILE="$DATA_DIR/delayed_receivers.list"
 
 BOOT_COMPLETED=$(getprop sys.boot_completed)
 UPTIME=$(uptime 2>/dev/null || echo "Unknown")

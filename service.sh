@@ -1,11 +1,14 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
-CONFIG_FILE="$MODDIR/config.json"
-LOG_FILE="$MODDIR/boot_delay.log"
-LIST_FILE="$MODDIR/delayed_receivers.list"
-PKGS_FILE="$MODDIR/delayed_packages.list"
+DATA_DIR="/data/adb/boot_delay_manager"
+CONFIG_FILE="$DATA_DIR/config.json"
+LOG_FILE="$DATA_DIR/boot_delay.log"
+LIST_FILE="$DATA_DIR/delayed_receivers.list"
+PKGS_FILE="$DATA_DIR/delayed_packages.list"
 WEBROOT="$MODDIR/webroot"
 PORT=8888
+
+mkdir -p "$DATA_DIR" 2>/dev/null
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
@@ -67,7 +70,7 @@ while true; do
     sleep 1
 done
 
-# 5. ĐẾM NGƯỢC THỜI GIAN VÀ HIỂN THỊ TRÊN THANH NOTIFICATION (chạy dưới UID 2000 shell)
+# 5. ĐẾM NGƯỢC THỜI GIAN VÀ HIỂN THỊ TRÊN THANH NOTIFICATION (UID 2000 shell)
 rem=$DELAY
 while [ $rem -gt 0 ]; do
     su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '⏳ Đang hoãn ứng dụng bên thứ 3: còn ${rem}s...'" >/dev/null 2>&1
@@ -80,7 +83,7 @@ su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '
 # 6. ĐÁNH THỨC CÁC APP BỊ HOÃN
 log "Delay finished. Awakening 3rd-party apps now..."
 
-# Kích hoạt lại toàn bộ receivers
+# BƯỚC A: Mở lại toàn bộ boot receivers để app sẵn sàng nhận tín hiệu
 if [ -f "$LIST_FILE" ]; then
     COUNT=0
     while IFS= read -r rec || [ -n "$rec" ]; do
@@ -91,14 +94,30 @@ if [ -f "$LIST_FILE" ]; then
     log "Re-enabled $COUNT boot receivers."
 fi
 
-# Phát broadcast khởi động toàn diện cho tất cả app
-am broadcast -a android.intent.action.BOOT_COMPLETED >/dev/null 2>&1
-log "Broadcasted BOOT_COMPLETED to all apps."
+# BƯỚC B: Bắn broadcast trực tiếp có chỉ định -p (Explicit Broadcast) cho từng app để vượt rào Android 8+
+AWAKEN_COUNT=0
+if [ -f "$PKGS_FILE" ]; then
+    while IFS= read -r pkg || [ -n "$pkg" ]; do
+        [ -z "$pkg" ] && continue
+        am broadcast -a android.intent.action.BOOT_COMPLETED -p "$pkg" >/dev/null 2>&1
+        AWAKEN_COUNT=$((AWAKEN_COUNT + 1))
+    done < "$PKGS_FILE"
+    log "Sent explicit BOOT_COMPLETED to $AWAKEN_COUNT packages."
+else
+    # Fallback: Quét danh sách package bên thứ 3 và gửi broadcast
+    for pkg in $(pm list packages -3 2>/dev/null | sed 's/package://g' | tr -d '\r'); do
+        [ -n "$pkg" ] && am broadcast -a android.intent.action.BOOT_COMPLETED -p "$pkg" >/dev/null 2>&1
+    done
+    log "Sent explicit BOOT_COMPLETED via fallback scan."
+fi
 
-# Cập nhật thông báo hoàn tất trên thanh thông báo
+# Cập nhật thông báo hoàn tất
 su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '✅ Hệ thống đã sẵn sàng! Đã kích hoạt toàn bộ app.'" >/dev/null 2>&1
 
-# Tái vũ trang (Re-disable) các receivers để sẵn sàng cho lần reboot tiếp theo
+# BƯỚC C: Chờ 10 giây để các app khởi động hoàn tất service nền
+sleep 10
+
+# BƯỚC D: Tái vũ trang (Re-disable) các receivers để sẵn sàng cho lần reboot tiếp theo
 if [ -f "$LIST_FILE" ]; then
     while IFS= read -r rec || [ -n "$rec" ]; do
         [ -z "$rec" ] && continue

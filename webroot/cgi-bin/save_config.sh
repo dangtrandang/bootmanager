@@ -1,10 +1,12 @@
 #!/system/bin/sh
 printf "Content-Type: application/json\r\n\r\n"
 
-MODDIR="/data/adb/modules/boot_delay_manager"
-CONFIG_FILE="$MODDIR/config.json"
-LIST_FILE="$MODDIR/delayed_receivers.list"
-PKGS_FILE="$MODDIR/delayed_packages.list"
+DATA_DIR="/data/adb/boot_delay_manager"
+CONFIG_FILE="$DATA_DIR/config.json"
+LIST_FILE="$DATA_DIR/delayed_receivers.list"
+PKGS_FILE="$DATA_DIR/delayed_packages.list"
+
+mkdir -p "$DATA_DIR" 2>/dev/null
 
 # Chỉ ghi đè CONFIG_FILE nếu nhận được body từ HTTP POST
 if [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ] 2>/dev/null; then
@@ -47,7 +49,10 @@ if [ "$ENABLED" = "true" ]; then
         TARGET_PKGS=$(grep -o '"[a-zA-Z0-9._]*"' "$CONFIG_FILE" | tr -d '"\r' | grep -v 'packages' | grep -v 'delay' | grep -v 'enabled' | grep -v 'delay_all_third_party' | grep -v 'true' | grep -v 'false')
     fi
 
-    echo "$TARGET_PKGS" > "$PKGS_FILE"
+    # Lưu danh sách package
+    for pkg in $TARGET_PKGS; do
+        [ -n "$pkg" ] && echo "$pkg" >> "$PKGS_FILE"
+    done
 
     # Quét tất cả boot receivers và disable
     (

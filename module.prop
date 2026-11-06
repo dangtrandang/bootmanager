@@ -1,6 +1,6 @@
 id=boot_delay_manager
 name=Boot Delay Manager
-version=v1.3.1
-versionCode=131
+version=v1.4.0
+versionCode=140
 author=Antigravity
-description=Hoãn khởi động app bên thứ 3 sau khi mở khóa màn hình, kèm đếm ngược trên thanh Notification và WebUI quản lý.
+description=Hoãn khởi động app bên thứ 3 sau khi mở khóa màn hình, kích hoạt chuẩn Explicit Broadcast sau delay và lưu cấu hình bền vững.
