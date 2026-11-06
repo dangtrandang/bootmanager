@@ -54,13 +54,22 @@ if [ "$ENABLED" != "true" ]; then
     exit 0
 fi
 
-# 3. Chờ Android hoàn thành boot (sys.boot_completed=1)
+# 3. Đảm bảo tất cả boot receivers bị khóa TRƯỚC KHI Android hoàn tất boot
+if [ -f "$LIST_FILE" ]; then
+    while IFS= read -r rec || [ -n "$rec" ]; do
+        [ -z "$rec" ] && continue
+        pm disable "$rec" >/dev/null 2>&1
+    done < "$LIST_FILE"
+    log "Pre-boot check: All boot receivers confirmed disabled before boot completion."
+fi
+
+# 4. Chờ Android hoàn thành boot (sys.boot_completed=1)
 while [ "$(getprop sys.boot_completed)" != "1" ]; do
     sleep 1
 done
 log "System boot completed. Device is sitting on lockscreen."
 
-# 4. CHỜ NGƯỜI DÙNG MỞ KHÓA MÀN HÌNH (isKeyguardShowing=false)
+# 5. CHỜ NGƯỜI DÙNG MỞ KHÓA MÀN HÌNH (isKeyguardShowing=false)
 log "Waiting for user to unlock the lockscreen..."
 while true; do
     if dumpsys window 2>/dev/null | grep -q "isKeyguardShowing=false"; then
@@ -70,7 +79,7 @@ while true; do
     sleep 1
 done
 
-# 5. ĐẾM NGƯỢC THỜI GIAN VÀ HIỂN THỊ TRÊN THANH NOTIFICATION (UID 2000 shell)
+# 6. ĐẾM NGƯỢC THỜI GIAN VÀ HIỂN THỊ TRÊN THANH NOTIFICATION (UID 2000 shell)
 rem=$DELAY
 while [ $rem -gt 0 ]; do
     su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '⏳ Đang hoãn ứng dụng bên thứ 3: còn ${rem}s...'" >/dev/null 2>&1
@@ -80,7 +89,7 @@ done
 
 su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '🚀 Hết thời gian hoãn! Đang kích hoạt các ứng dụng...'" >/dev/null 2>&1
 
-# 6. ĐÁNH THỨC CÁC APP BỊ HOÃN
+# 7. ĐÁNH THỨC CÁC APP BỊ HOÃN
 log "Delay finished. Awakening 3rd-party apps now..."
 
 # BƯỚC A: Mở lại từng boot receiver và BẮN TRỰC TIẾP broadcast đích danh (-n) vào receiver đó
@@ -106,18 +115,24 @@ fi
 
 # Cập nhật thông báo hoàn tất trên thanh thông báo
 su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '✅ Hệ thống đã sẵn sàng! Đã kích hoạt toàn bộ app.'" >/dev/null 2>&1
+log "=== All delayed apps successfully awakened and kept running! ==="
 
-# BƯỚC C: Chờ 20 giây để app khởi động hoàn tất các service và workflow chạy ngầm
-log "Waiting 20s grace period for background services to spin up..."
-sleep 20
+# 8. SHUTDOWN HOOK: Lắng nghe lệnh Tắt máy / Khởi động lại để tái vũ trang trước khi tắt nguồn
+# (KHÔNG chạy pm disable khi máy đang dùng bình thường để tránh kill app đang chạy)
+while true; do
+    PWR=$(getprop sys.powerctl)
+    SHUT=$(getprop sys.shutdown.requested)
+    if [ -n "$PWR" ] || [ -n "$SHUT" ]; then
+        log "Shutdown/reboot detected ($PWR $SHUT). Disabling boot receivers for next boot..."
+        if [ -f "$LIST_FILE" ]; then
+            while IFS= read -r rec || [ -n "$rec" ]; do
+                [ -z "$rec" ] && continue
+                pm disable "$rec" >/dev/null 2>&1
+            done < "$LIST_FILE"
+        fi
+        log "All receivers armed for next boot."
+        break
+    fi
+    sleep 1
+done
 
-# BƯỚC D: Tái vũ trang (Re-disable) các receivers để sẵn sàng cho lần reboot tiếp theo
-if [ -f "$LIST_FILE" ]; then
-    while IFS= read -r rec || [ -n "$rec" ]; do
-        [ -z "$rec" ] && continue
-        pm disable "$rec" >/dev/null 2>&1
-    done < "$LIST_FILE"
-    log "Re-armed all receivers for next reboot."
-fi
-
-log "=== All delayed apps successfully awakened. Ready! ==="
