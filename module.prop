@@ -1,6 +1,6 @@
 id=boot_delay_manager
 name=Boot Delay Manager
-version=v1.4.0
-versionCode=140
+version=v1.4.1
+versionCode=141
 author=Antigravity
-description=Hoãn khởi động app bên thứ 3 sau khi mở khóa màn hình, kích hoạt chuẩn Explicit Broadcast sau delay và lưu cấu hình bền vững.
+description=Hoãn khởi động app bên thứ 3 sau khi mở khóa màn hình, kích hoạt chuẩn xác từng Component Receiver (-n) sau delay.

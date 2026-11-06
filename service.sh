@@ -83,39 +83,33 @@ su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '
 # 6. ĐÁNH THỨC CÁC APP BỊ HOÃN
 log "Delay finished. Awakening 3rd-party apps now..."
 
-# BƯỚC A: Mở lại toàn bộ boot receivers để app sẵn sàng nhận tín hiệu
+# BƯỚC A: Mở lại từng boot receiver và BẮN TRỰC TIẾP broadcast đích danh (-n) vào receiver đó
 if [ -f "$LIST_FILE" ]; then
     COUNT=0
     while IFS= read -r rec || [ -n "$rec" ]; do
         [ -z "$rec" ] && continue
         pm enable "$rec" >/dev/null 2>&1
+        am broadcast -a android.intent.action.BOOT_COMPLETED -n "$rec" >/dev/null 2>&1
         COUNT=$((COUNT + 1))
     done < "$LIST_FILE"
-    log "Re-enabled $COUNT boot receivers."
+    log "Awakened $COUNT boot receivers directly via -n component."
 fi
 
-# BƯỚC B: Bắn broadcast trực tiếp có chỉ định -p (Explicit Broadcast) cho từng app để vượt rào Android 8+
-AWAKEN_COUNT=0
+# BƯỚC B: Bắn bổ sung theo package (-p) để đảm bảo không sót WorkManager/JobScheduler
 if [ -f "$PKGS_FILE" ]; then
     while IFS= read -r pkg || [ -n "$pkg" ]; do
         [ -z "$pkg" ] && continue
         am broadcast -a android.intent.action.BOOT_COMPLETED -p "$pkg" >/dev/null 2>&1
-        AWAKEN_COUNT=$((AWAKEN_COUNT + 1))
     done < "$PKGS_FILE"
-    log "Sent explicit BOOT_COMPLETED to $AWAKEN_COUNT packages."
-else
-    # Fallback: Quét danh sách package bên thứ 3 và gửi broadcast
-    for pkg in $(pm list packages -3 2>/dev/null | sed 's/package://g' | tr -d '\r'); do
-        [ -n "$pkg" ] && am broadcast -a android.intent.action.BOOT_COMPLETED -p "$pkg" >/dev/null 2>&1
-    done
-    log "Sent explicit BOOT_COMPLETED via fallback scan."
+    log "Sent package-level BOOT_COMPLETED to all packages."
 fi
 
-# Cập nhật thông báo hoàn tất
+# Cập nhật thông báo hoàn tất trên thanh thông báo
 su 2000 -c "cmd notification post -t '⚡ Boot Delay Manager' boot_delay_timer '✅ Hệ thống đã sẵn sàng! Đã kích hoạt toàn bộ app.'" >/dev/null 2>&1
 
-# BƯỚC C: Chờ 10 giây để các app khởi động hoàn tất service nền
-sleep 10
+# BƯỚC C: Chờ 20 giây để app khởi động hoàn tất các service và workflow chạy ngầm
+log "Waiting 20s grace period for background services to spin up..."
+sleep 20
 
 # BƯỚC D: Tái vũ trang (Re-disable) các receivers để sẵn sàng cho lần reboot tiếp theo
 if [ -f "$LIST_FILE" ]; then
