@@ -13,14 +13,7 @@ if [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ] 2>/dev/null; then
     head -c "$CONTENT_LENGTH" > "$CONFIG_FILE"
 fi
 
-# 1. Khôi phục các receiver đã disable trước đó để query đầy đủ
-if [ -f "$LIST_FILE" ]; then
-    while IFS= read -r rec || [ -n "$rec" ]; do
-        [ -n "$rec" ] && pm enable "$rec" >/dev/null 2>&1
-    done < "$LIST_FILE"
-    rm -f "$LIST_FILE"
-fi
-rm -f "$PKGS_FILE"
+rm -f "$LIST_FILE" "$PKGS_FILE"
 
 # 2. Đọc cấu hình
 ENABLED="true"
@@ -54,11 +47,27 @@ if [ "$ENABLED" = "true" ]; then
         [ -n "$pkg" ] && echo "$pkg" >> "$PKGS_FILE"
     done
 
-    # Quét tất cả boot receivers và disable
-    (
-        cmd package query-receivers --brief -a android.intent.action.BOOT_COMPLETED 2>/dev/null
-        cmd package query-receivers --brief -a android.intent.action.LOCKED_BOOT_COMPLETED 2>/dev/null
-    ) | grep / | tr -d ' \r' | while read -r rec; do
+    # Quét tất cả boot receivers từ dumpsys package receivers (bất kể enabled hay disabled)
+    ALL_BOOT=$(dumpsys package receivers 2>/dev/null | awk '
+    /android.intent.action.(LOCKED_)?BOOT_COMPLETED:/ { in_boot=1; next }
+    /^[ ]*[a-zA-Z0-9._-]+:/ { if ($0 !~ /BOOT_COMPLETED/) in_boot=0 }
+    in_boot && /\// {
+        for (i=1; i<=NF; i++) {
+            if ($i ~ /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._$-]+$/) {
+                comp = $i
+                split(comp, parts, "/")
+                pkg = parts[1]
+                cls = parts[2]
+                if (substr(cls, 1, 1) == ".") {
+                    cls = pkg cls
+                }
+                print pkg "/" cls
+            }
+        }
+    }
+    ' | sort -u)
+
+    echo "$ALL_BOOT" | while read -r rec; do
         [ -z "$rec" ] && continue
         pkg=$(echo "$rec" | cut -d/ -f1)
         if echo "$TARGET_PKGS" | grep -q "^${pkg}$"; then

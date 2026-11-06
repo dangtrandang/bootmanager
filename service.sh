@@ -54,13 +54,43 @@ if [ "$ENABLED" != "true" ]; then
     exit 0
 fi
 
-# 3. Đảm bảo tất cả boot receivers bị khóa TRƯỚC KHI Android hoàn tất boot
+# 3. Đảm bảo danh sách receivers đầy đủ và bị khóa TRƯỚC KHI Android hoàn tất boot
+REC_COUNT=0
+[ -f "$LIST_FILE" ] && REC_COUNT=$(wc -l < "$LIST_FILE" 2>/dev/null || echo 0)
+
+if [ "$REC_COUNT" -lt 10 ]; then
+    log "Receiver list missing or incomplete ($REC_COUNT). Performing automatic scan from manifest..."
+    pm list packages -3 2>/dev/null | sed 's/package://' | tr -d '\r ' > "$PKGS_FILE"
+    dumpsys package receivers 2>/dev/null | awk '
+    /android.intent.action.(LOCKED_)?BOOT_COMPLETED:/ { in_boot=1; next }
+    /^[ ]*[a-zA-Z0-9._-]+:/ { if ($0 !~ /BOOT_COMPLETED/) in_boot=0 }
+    in_boot && /\// {
+        for (i=1; i<=NF; i++) {
+            if ($i ~ /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._$-]+$/) {
+                comp = $i
+                split(comp, parts, "/")
+                pkg = parts[1]
+                cls = parts[2]
+                if (substr(cls, 1, 1) == ".") {
+                    cls = pkg cls
+                }
+                print pkg "/" cls
+            }
+        }
+    }
+    ' | sort -u > /data/local/tmp/all_boot_receivers.txt
+    grep -Ff "$PKGS_FILE" /data/local/tmp/all_boot_receivers.txt 2>/dev/null | sort -u > "$LIST_FILE"
+    rm -f /data/local/tmp/all_boot_receivers.txt 2>/dev/null
+    REC_COUNT=$(wc -l < "$LIST_FILE" 2>/dev/null || echo 0)
+    log "Scan completed. Found $REC_COUNT 3rd-party boot receivers."
+fi
+
 if [ -f "$LIST_FILE" ]; then
     while IFS= read -r rec || [ -n "$rec" ]; do
         [ -z "$rec" ] && continue
         pm disable "$rec" >/dev/null 2>&1
     done < "$LIST_FILE"
-    log "Pre-boot check: All boot receivers confirmed disabled before boot completion."
+    log "Pre-boot check: All $REC_COUNT boot receivers confirmed disabled before boot completion."
 fi
 
 # 4. Chờ Android hoàn thành boot (sys.boot_completed=1)
