@@ -11,7 +11,7 @@ if [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ] 2>/dev/null; then
     head -c "$CONTENT_LENGTH" > "$CONFIG_FILE"
 fi
 
-# 1. Khôi phục các receiver đã disable trước đó
+# 1. Khôi phục các receiver đã disable trước đó để query đầy đủ
 if [ -f "$LIST_FILE" ]; then
     while IFS= read -r rec || [ -n "$rec" ]; do
         [ -n "$rec" ] && pm enable "$rec" >/dev/null 2>&1
@@ -47,10 +47,9 @@ if [ "$ENABLED" = "true" ]; then
         TARGET_PKGS=$(grep -o '"[a-zA-Z0-9._]*"' "$CONFIG_FILE" | tr -d '"\r' | grep -v 'packages' | grep -v 'delay' | grep -v 'enabled' | grep -v 'delay_all_third_party' | grep -v 'true' | grep -v 'false')
     fi
 
-    # Lưu danh sách package
     echo "$TARGET_PKGS" > "$PKGS_FILE"
 
-    # Duyệt qua các broadcast receiver khởi động và disable
+    # Quét tất cả boot receivers và disable
     (
         cmd package query-receivers --brief -a android.intent.action.BOOT_COMPLETED 2>/dev/null
         cmd package query-receivers --brief -a android.intent.action.LOCKED_BOOT_COMPLETED 2>/dev/null
@@ -63,7 +62,10 @@ if [ "$ENABLED" = "true" ]; then
         fi
     done
 
-    [ -f "$LIST_FILE" ] && DISABLED_COUNT=$(wc -l < "$LIST_FILE" 2>/dev/null || echo 0)
+    if [ -f "$LIST_FILE" ]; then
+        sort -u -o "$LIST_FILE" "$LIST_FILE" 2>/dev/null
+        DISABLED_COUNT=$(wc -l < "$LIST_FILE" 2>/dev/null || echo 0)
+    fi
 fi
 
 echo "{\"status\": \"ok\", \"disabled_receivers\": $DISABLED_COUNT}"
