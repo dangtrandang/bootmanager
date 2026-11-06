@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "delay": 15,
+  "delay_all_third_party": true,
+  "packages": []
+}

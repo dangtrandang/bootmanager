@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Boot Delay Manager</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d26;
+            --surface-hover: #232734;
+            --border: #2e3446;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --text: #f3f4f6;
+            --text-sub: #9ca3af;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 16px;
+            padding-bottom: 90px;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-badge {
+            background: #064e3b;
+            color: #34d399;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        .card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+        .control-row + .control-row {
+            border-top: 1px solid var(--border);
+            margin-top: 8px;
+            padding-top: 12px;
+        }
+        .control-label {
+            font-size: 0.9rem;
+        }
+        .control-sub {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            margin-top: 2px;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 26px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-switch {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #374151;
+            transition: .2s;
+            border-radius: 34px;
+        }
+        .slider-switch:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .2s;
+            border-radius: 50%;
+        }
+        input:checked + .slider-switch {
+            background-color: var(--primary);
+        }
+        input:checked + .slider-switch:before {
+            transform: translateX(20px);
+        }
+        .delay-input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .delay-input {
+            width: 70px;
+            background: #242938;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px;
+            color: white;
+            font-size: 1rem;
+            text-align: center;
+            font-weight: bold;
+        }
+        .search-box {
+            width: 100%;
+            background: #242938;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: white;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .btn-sm {
+            background: #242938;
+            border: 1px solid var(--border);
+            color: var(--text-sub);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-sm:active { background: var(--surface-hover); }
+        .app-list {
+            max-height: 420px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+        .app-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            background: #141720;
+            margin-bottom: 6px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+        }
+        .app-item.selected {
+            border-color: #2563eb66;
+            background: #192033;
+        }
+        .app-name {
+            font-size: 0.85rem;
+            word-break: break-all;
+            padding-right: 10px;
+        }
+        .sticky-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(26, 29, 38, 0.92);
+            backdrop-filter: blur(8px);
+            padding: 14px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+        }
+        .btn-save {
+            flex: 1;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 13px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+        }
+        .btn-save:active { background: var(--primary-hover); transform: scale(0.98); }
+        .log-box {
+            background: #0d0f15;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.72rem;
+            color: #94a3b8;
+            max-height: 140px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--success);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div id="toast" class="toast">Đã lưu cấu hình!</div>
+
+    <div class="header">
+        <h1>⚡ Boot Delay</h1>
+        <span class="status-badge" id="bootStatus">System Online</span>
+    </div>
+
+    <!-- CÀI ĐẶT CHUNG -->
+    <div class="card">
+        <div class="control-row">
+            <div>
+                <div class="control-label">Bật cơ chế hoãn Boot</div>
+                <div class="control-sub">Chỉ load app hệ thống trước khi khởi động app 3rd</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="enabledToggle" checked>
+                <span class="slider-switch"></span>
+            </label>
+        </div>
+
+        <div class="control-row">
+            <div>
+                <div class="control-label">Thời gian Delay (giây)</div>
+                <div class="control-sub">Đếm ngược sau khi màn hình khóa sẵn sàng</div>
+            </div>
+            <div class="delay-input-group">
+                <input type="number" id="delayInput" class="delay-input" min="3" max="180" value="15">
+                <span style="font-size: 0.85rem; color: var(--text-sub);">s</span>
+            </div>
+        </div>
+
+        <div class="control-row">
+            <div>
+                <div class="control-label">Hoãn TOÀN BỘ app bên thứ 3</div>
+                <div class="control-sub">Tự động áp dụng cho tất cả app cài thêm (-3)</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="delayAllToggle">
+                <span class="slider-switch"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- DANH SÁCH APP -->
+    <div class="card" id="appCard">
+        <div class="card-title">
+            <span>Danh sách App hoãn</span>
+            <span style="font-size: 0.8rem; color: var(--text-sub);" id="selectedCount">0 đã chọn</span>
+        </div>
+        
+        <input type="text" id="searchInput" class="search-box" placeholder="🔍 Tìm tên package (vd: facebook, zalo)...">
+        
+        <div class="btn-group">
+            <button class="btn-sm" onclick="selectAll(true)">Chọn tất cả</button>
+            <button class="btn-sm" onclick="selectAll(false)">Bỏ chọn hết</button>
+        </div>
+
+        <div class="app-list" id="appList">
+            <div style="text-align: center; padding: 20px; color: var(--text-sub);">Đang tải danh sách app...</div>
+        </div>
+    </div>
+
+    <!-- LOG HỆ THỐNG -->
+    <div class="card">
+        <div class="card-title">
+            <span>Nhật ký Boot gần nhất</span>
+            <button class="btn-sm" onclick="loadStatus()">Làm mới</button>
+        </div>
+        <div class="log-box" id="logContent">Đang kiểm tra log...</div>
+    </div>
+
+    <div class="sticky-footer">
+        <button class="btn-save" onclick="saveConfig()">💾 LƯU CẤU HÌNH</button>
+    </div>
+
+    <script>
+        let allApps = [];
+        let selectedPackages = new Set();
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2000);
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch('/cgi-bin/get_apps.sh');
+                const data = await res.json();
+                
+                allApps = data.all_apps || [];
+                const cfg = data.config || {};
+                
+                document.getElementById('enabledToggle').checked = cfg.enabled !== false;
+                document.getElementById('delayInput').value = cfg.delay || 15;
+                document.getElementById('delayAllToggle').checked = !!cfg.delay_all_third_party;
+
+                selectedPackages = new Set(cfg.packages || []);
+                renderAppList();
+                updateDelayAllUI();
+            } catch (err) {
+                document.getElementById('appList').innerHTML = `<div style="color: #ef4444; padding: 10px;">Lỗi tải dữ liệu: ${err.message}</div>`;
+            }
+        }
+
+        async function loadStatus() {
+            try {
+                const res = await fetch('/cgi-bin/status.sh');
+                const data = await res.json();
+                document.getElementById('logContent').innerText = data.logs || "Chưa có log.";
+                if (data.boot_completed === "1") {
+                    document.getElementById('bootStatus').innerText = "Boot Xong";
+                } else {
+                    document.getElementById('bootStatus').innerText = "Đang Boot...";
+                    document.getElementById('bootStatus').style.background = "#78350f";
+                    document.getElementById('bootStatus').style.color = "#fbbf24";
+                }
+            } catch (e) {
+                document.getElementById('logContent').innerText = "Không thể lấy log: " + e;
+            }
+        }
+
+        function renderAppList() {
+            const container = document.getElementById('appList');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            container.innerHTML = '';
+
+            const filtered = allApps.filter(p => p.toLowerCase().includes(search));
+            if (filtered.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-sub);">Không tìm thấy app nào.</div>';
+                return;
+            }
+
+            filtered.forEach(pkg => {
+                const isSelected = selectedPackages.has(pkg);
+                const item = document.createElement('div');
+                item.className = 'app-item' + (isSelected ? ' selected' : '');
+                item.innerHTML = `
+                    <span class="app-name">${pkg}</span>
+                    <label class="switch" style="transform: scale(0.85); transform-origin: right center;">
+                        <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="togglePackage('${pkg}', this.checked, this)">
+                        <span class="slider-switch"></span>
+                    </label>
+                `;
+                container.appendChild(item);
+            });
+
+            document.getElementById('selectedCount').innerText = `${selectedPackages.size} / ${allApps.length} đã chọn`;
+        }
+
+        function togglePackage(pkg, isChecked, checkboxEl) {
+            if (isChecked) {
+                selectedPackages.add(pkg);
+                checkboxEl.closest('.app-item').classList.add('selected');
+            } else {
+                selectedPackages.delete(pkg);
+                checkboxEl.closest('.app-item').classList.remove('selected');
+            }
+            document.getElementById('selectedCount').innerText = `${selectedPackages.size} / ${allApps.length} đã chọn`;
+        }
+
+        function selectAll(state) {
+            if (state) {
+                allApps.forEach(p => selectedPackages.add(p));
+            } else {
+                selectedPackages.clear();
+            }
+            renderAppList();
+        }
+
+        document.getElementById('searchInput').addEventListener('input', renderAppList);
+        
+        document.getElementById('delayAllToggle').addEventListener('change', updateDelayAllUI);
+
+        function updateDelayAllUI() {
+            const isAll = document.getElementById('delayAllToggle').checked;
+            const appCard = document.getElementById('appCard');
+            if (isAll) {
+                appCard.style.opacity = '0.5';
+                appCard.style.pointerEvents = 'none';
+            } else {
+                appCard.style.opacity = '1';
+                appCard.style.pointerEvents = 'auto';
+            }
+        }
+
+        async function saveConfig() {
+            const enabled = document.getElementById('enabledToggle').checked;
+            const delay = parseInt(document.getElementById('delayInput').value, 10) || 15;
+            const delayAll = document.getElementById('delayAllToggle').checked;
+
+            const payload = {
+                enabled: enabled,
+                delay: delay,
+                delay_all_third_party: delayAll,
+                packages: Array.from(selectedPackages)
+            };
+
+            try {
+                const res = await fetch('/cgi-bin/save_config.sh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload, null, 2)
+                });
+                const result = await res.json();
+                if (result.status === 'ok') {
+                    showToast('✅ Đã lưu cấu hình thành công!');
+                } else {
+                    alert('Lỗi lưu cấu hình: ' + JSON.stringify(result));
+                }
+            } catch (err) {
+                alert('Không thể kết nối đến Web server: ' + err.message);
+            }
+        }
+
+        loadData();
+        loadStatus();
+    </script>
+</body>
+</html>
+
